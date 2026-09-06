@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ===== 批改侦探 GradeDetect 全局样式 ===== */
+:root {
+  --gd-primary: #1D4ED8;
+  --gd-amber: #D97706;
+  --gd-green: #059669;
+  --gd-gray: #6B7280;
+  --gd-highlight: #FEF08A;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #F5F6F8;
+  color: #1F2937;
+}
+
+/* 证据高亮闪烁效果（灵魂交互） */
+@keyframes gd-evidence-flash {
+  0% { background-color: #FEF08A; }
+  100% { background-color: transparent; }
+}
+.gd-evidence-highlight {
+  animation: gd-evidence-flash 2s ease-out forwards;
+  background-color: #FEF08A;
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+
+/* 流式打字光标 */
+@keyframes gd-cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.gd-typing-cursor::after {
+  content: "▌";
+  color: #1D4ED8;
+  animation: gd-cursor-blink 1s infinite;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #C4C9D4; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 代码块基础样式（报告内嵌代码） */
+.gd-code-block {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
