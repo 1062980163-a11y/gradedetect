@@ -172,6 +172,37 @@ export default function GradeDesk() {
             <span className="text-xs text-slate-400">有 {submissions.filter((s) => s.status === 'pending').length} 份待批改</span>
           )}
         </div>
+
+        {submissions.length === 0 ? (
+          /* 真实教学模式空状态：上传引导 */
+          <div className="flex flex-col items-center justify-center px-6 py-16">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
+              <Upload size={28} className="text-blue-600" />
+            </span>
+            <h3 className="mt-4 text-base font-bold text-slate-800">真实教学模式已就绪</h3>
+            <p className="mt-1.5 max-w-md text-center text-sm leading-relaxed text-slate-500">
+              演示人名已清空。开始真实教学三步走：<br />
+              ① 粘贴实验指导书，AI 生成评分细则（可手动微调）<br />
+              ② 上传学生报告（Markdown / 纯文本）<br />
+              ③ 一键批改，逐项证据核查
+            </p>
+            <div className="mt-5 flex gap-2.5">
+              <button
+                onClick={() => { setRubricOpen(true) }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <Sparkles size={14} /> 先配置评分细则
+              </button>
+              <button
+                onClick={() => setUploadOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                <Upload size={14} /> 上传第一份报告
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-xs text-slate-500">
@@ -218,8 +249,10 @@ export default function GradeDesk() {
                 </td>
               </tr>
             ))}
-          </tbody>
+           </tbody>
         </table>
+        </>
+        )}
       </section>
 
       {grading && (

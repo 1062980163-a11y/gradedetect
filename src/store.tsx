@@ -36,6 +36,10 @@ interface Store {
   updateAssignment: (patch: Partial<AppState['assignment']>) => void
   removeSubmission: (id: string) => void
   resetAll: () => void
+  /** 真实教学模式：清空全部演示报告，保留评分细则与设置，得到干净系统供真实教学使用 */
+  clearDemoData: () => void
+  /** 恢复演示数据（预置 6 份报告与批改结果） */
+  restoreDemoData: () => void
 }
 
 const StoreContext = createContext<Store | null>(null)
@@ -78,6 +82,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...prev,
       submissions: prev.submissions.filter((s) => s.id !== id),
     })),
+    clearDemoData: () => setState((prev) => ({
+      ...prev,
+      submissions: [],
+    })),
+    restoreDemoData: () => setState((prev) => {
+      const demoSubs = JSON.parse(JSON.stringify(initialSubmissions)) as Submission[]
+      // 保留已有的真实报告（非演示学号），演示数据追加在后面；同 ID/同学号去重
+      const demoIds = new Set(demoSubs.map((s) => s.studentId))
+      const kept = prev.submissions.filter((s) => !demoIds.has(s.studentId))
+      return { ...prev, submissions: [...kept, ...demoSubs] }
+    }),
     resetAll: () => {
       localStorage.removeItem(STORAGE_KEY)
       setState({ assignment: initialAssignment, submissions: initialSubmissions, settings: defaultSettings })

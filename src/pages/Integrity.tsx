@@ -34,6 +34,18 @@ export default function Integrity() {
       )
     : submissions
 
+  if (submissions.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-center px-6 py-24">
+        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+          <ShieldCheck size={28} className="text-slate-400" />
+        </span>
+        <h2 className="mt-4 text-base font-bold text-slate-700">暂无报告可体检</h2>
+        <p className="mt-1.5 text-sm text-slate-400">真实教学模式下，上传学生报告并批改后，此处将显示三重造假检测结果</p>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-6">
       {/* 页头 */}

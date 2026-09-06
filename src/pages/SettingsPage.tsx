@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { Settings as SettingsIcon, Plug, RotateCcw, TriangleAlert } from 'lucide-react'
+import { Settings as SettingsIcon, Plug, RotateCcw, TriangleAlert, GraduationCap, Sparkles, CheckCircle2 } from 'lucide-react'
 import { useStore } from '../store'
 import { testConnection } from '../lib/ai'
 import { Spinner } from '../components/ui'
 
 export default function SettingsPage() {
-  const { state, setSettings, resetAll } = useStore()
-  const { settings } = state
+  const { state, setSettings, resetAll, clearDemoData, restoreDemoData } = useStore()
+  const { settings, submissions } = state
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [confirmTeach, setConfirmTeach] = useState(false)
 
   const runTest = async () => {
     setTesting(true)
@@ -21,12 +22,89 @@ export default function SettingsPage() {
   }
 
   const demo = !settings.apiKey.trim()
+  // 判定当前是否载有演示剧本：演示报告的学生ID集合（与 demoData 一致）
+  const DEMO_IDS = ['2023010101', '2023010102', '2023010103', '2023010104', '2023010105', '2023010106']
+  const hasDemoData = submissions.some((s) => DEMO_IDS.includes(s.studentId))
+  const teachMode = submissions.length === 0
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-6">
       <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
         <SettingsIcon size={22} className="text-blue-700" /> 设置
       </h1>
+
+      {/* 工作模式 */}
+      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-800">工作模式</h2>
+        <p className="mt-1 text-xs text-slate-500">演示模式内置 6 份剧本报告用于展示；真实教学请切换到教学模式，清空演示人名后上传你自己的学生作业。</p>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {/* 演示模式卡片 */}
+          <div className={`rounded-xl border-2 p-4 transition-colors ${hasDemoData ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200'}`}>
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-blue-600" />
+              <span className="text-sm font-bold text-slate-800">演示模式</span>
+              {hasDemoData && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">当前</span>}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">内置 6 份剧本报告（陈墨、张一帆等）与批改结果，适合快速了解产品能力、参赛评审演示。</p>
+            {!hasDemoData && (
+              <button
+                onClick={() => { if (window.confirm('载入演示数据？将补充预置的 6 份报告与批改结果（你已上传的学生报告将保留在列表后面）。')) restoreDemoData() }}
+                className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                载入演示数据
+              </button>
+            )}
+          </div>
+
+          {/* 真实教学模式卡片 */}
+          <div className={`rounded-xl border-2 p-4 transition-colors ${teachMode ? 'border-green-500 bg-green-50/50' : 'border-slate-200'}`}>
+            <div className="flex items-center gap-2">
+              <GraduationCap size={16} className="text-green-600" />
+              <span className="text-sm font-bold text-slate-800">真实教学模式</span>
+              {teachMode && <span className="ml-auto rounded-full bg-green-600 px-2 py-0.5 text-[10px] font-bold text-white">当前</span>}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">清空全部演示人名，得到干净系统：自己上传学生报告、配置评分细则、真实批改。强烈建议同时配置 API Key 使用在线批改。</p>
+            {!teachMode && (
+              <button
+                onClick={() => setConfirmTeach(true)}
+                className="mt-3 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-semibold text-green-700 hover:bg-green-50"
+              >
+                切换到教学模式
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 清空确认弹窗 */}
+        {confirmTeach && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={() => setConfirmTeach(false)}>
+            <div className="w-[440px] max-w-[92vw] rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900">
+                <TriangleAlert size={18} className="text-amber-500" /> 切换到真实教学模式？
+              </h3>
+              <div className="mt-3 space-y-2 text-sm leading-relaxed text-slate-600">
+                <p>将执行以下操作：</p>
+                <ul className="ml-4 list-disc space-y-1 text-[13px]">
+                  <li>清空当前 <b className="text-slate-800">{submissions.length}</b> 份报告（含演示人名与批改结果）</li>
+                  <li>保留实验任务标题与评分细则（可继续使用或用 AI 重新生成）</li>
+                  <li>保留 AI 接口配置</li>
+                </ul>
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-700">注意：此操作不可撤销。如有已批改的真实成绩需要保留，请先在班级看板导出 CSV 成绩单。</p>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setConfirmTeach(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">取消</button>
+                <button
+                  onClick={() => { clearDemoData(); setConfirmTeach(false) }}
+                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+                >
+                  <span className="flex items-center gap-1.5"><CheckCircle2 size={14} /> 确认清空，进入教学模式</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* BYOK 配置 */}
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
