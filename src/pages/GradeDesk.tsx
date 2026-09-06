@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, Sparkles, ChevronDown, ChevronRight, Play, Loader2 } from 'lucide-react'
+import { FileText, Sparkles, ChevronDown, ChevronRight, Play, Loader2, Upload, Trash2, ScanSearch } from 'lucide-react'
 import { useStore } from '../store'
 import { StatusBadge, Spinner } from '../components/ui'
+import UploadModal from '../components/UploadModal'
 import { gradeSubmission, generateRubric, isDemoMode, sleep, demoLectureNote } from '../lib/ai'
 import type { RubricItem } from '../types'
 
 export default function GradeDesk() {
-  const { state, updateSubmission } = useStore()
+  const { state, updateSubmission, removeSubmission, updateAssignment } = useStore()
   const { assignment, submissions, settings } = state
   const [rubricOpen, setRubricOpen] = useState(false)
   const [grading, setGrading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [generating, setGenerating] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   const demo = isDemoMode(settings)
   const gradedCount = submissions.filter((s) => s.review).length
@@ -68,14 +70,22 @@ export default function GradeDesk() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button
-              onClick={gradeAll}
-              disabled={grading || gradedCount === submissions.length}
-              className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {grading ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-              {grading ? `批改中 ${progress}%` : gradedCount === submissions.length ? '全部已批改' : '一键批改全部'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setUploadOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+              >
+                <Upload size={15} /> 上传报告
+              </button>
+              <button
+                onClick={gradeAll}
+                disabled={grading || gradedCount === submissions.length}
+                className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {grading ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+                {grading ? `批改中 ${progress}%` : gradedCount === submissions.length ? '全部已批改' : '一键批改全部'}
+              </button>
+            </div>
             {grading && (
               <div className="h-1.5 w-44 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
@@ -133,6 +143,17 @@ export default function GradeDesk() {
                     <ul className="list-inside list-decimal space-y-1 text-slate-600">
                       {rubricDraft.map((r) => <li key={r.id}>{r.name}（{r.score} 分）— {r.checkPoints}</li>)}
                     </ul>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('应用新评分细则？现有批改结果保留，新批改将按新细则执行。')) {
+                          updateAssignment({ rubricItems: rubricDraft })
+                          setRubricDraft(null)
+                        }
+                      }}
+                      className="mt-2.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-800"
+                    >
+                      应用为新评分细则
+                    </button>
                   </div>
                 )}
               </div>
@@ -143,7 +164,14 @@ export default function GradeDesk() {
 
       {/* 报告列表 */}
       <section className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-700">学生报告</div>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <ScanSearch size={15} className="text-slate-400" /> 学生报告（{submissions.length} 份）
+          </span>
+          {submissions.some((s) => s.status === 'pending') && (
+            <span className="text-xs text-slate-400">有 {submissions.filter((s) => s.status === 'pending').length} 份待批改</span>
+          )}
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-xs text-slate-500">
@@ -170,12 +198,23 @@ export default function GradeDesk() {
                   )}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <Link
-                    to={`/review/${s.id}`}
-                    className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    {s.review ? '查看批改' : '去批改'}
-                  </Link>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Link
+                      to={`/review/${s.id}`}
+                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-50"
+                    >
+                      {s.review ? '查看批改' : '去批改'}
+                    </Link>
+                    {!s.review && (
+                      <button
+                        onClick={() => { if (window.confirm(`确认删除 ${s.studentName}（${s.studentId}）的报告？`)) removeSubmission(s.id) }}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                        title="删除报告"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -188,6 +227,8 @@ export default function GradeDesk() {
           <Spinner text={`正在逐项核查第 ${progress > 0 ? Math.ceil((progress / 100) * submissions.filter((s) => !s.review).length + submissions.filter((s) => s.review).length) : 1} 份…`} />
         </div>
       )}
+
+      {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} />}
     </div>
   )
 }

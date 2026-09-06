@@ -95,9 +95,9 @@ export async function gradeSubmission(
 ): Promise<Review> {
   if (isDemoMode(cfg)) {
     await sleep(900)
-    // 演示模式：按学号返回预置剧本（review 已在提交数据中；pending 状态时模拟生成）
+    // 演示模式：预置剧本优先；新上传的报告用本地规则引擎生成合理结果
     if (sub.review) return sub.review
-    return sub.review!
+    return demoGrade(assignment.rubricItems, sub)
   }
   const prompt = `你是严谨的高校助教，按评分细则逐项核查实验报告。
 规则：
@@ -248,3 +248,132 @@ export function runIntegrityCheck(subs: Submission[]): IntegrityResult {
 }
 
 export { demoLectureNote }
+
+// ---------- 演示模式：新上传报告的本地规则批改引擎 ----------
+// 逻辑透明可解释：调库→相关项判 none；代码量与关键结构→达成度；无代码块→低分
+
+function demoGrade(rubricItems: RubricItem[], sub: Submission): Review {
+  const content = sub.content
+  const codeBlocks = content.split('```').length - 1 >= 2 // 至少一对围栏
+  const codeLen = extractCodeLen(content)
+  const libHits = detectLibCalls(content)
+  const hasTests = /测试|用例|T\d|期望/.test(content)
+  const hasAnalysis = /复杂度|O\(|分析/.test(content)
+  const hasBoundary = /边界|空串|空模式/.test(content)
+
+  const items = rubricItems.map((r) => {
+    let verdict: 'full' | 'partial' | 'none' = 'full'
+    let score = r.score
+    const lowerName = r.name
+
+    // 与"实现"相关的项：没代码或调库 → none/partial
+    if (/next|主匹配|流程|实现|算法/.test(lowerName)) {
+      if (!codeBlocks || codeLen < 80) {
+        verdict = 'none'; score = 0
+      } else if (libHits.length > 0) {
+        verdict = 'none'; score = 0
+      } else if (codeLen < 300) {
+        verdict = 'partial'; score = Math.round(r.score * 0.6)
+      }
+    }
+    // 边界项
+    if (/边界/.test(lowerName)) {
+      if (!codeBlocks || codeLen < 80) { verdict = 'none'; score = 0 }
+      else if (!hasBoundary) { verdict = 'partial'; score = Math.round(r.score * 0.5) }
+    }
+    // 规范项
+    if (/规范|注释/.test(lowerName)) {
+      if (!codeBlocks) { verdict = 'none'; score = 0 }
+      else if (!/"""|#|\/\//.test(content)) { verdict = 'partial'; score = Math.round(r.score * 0.5) }
+    }
+    // 报告完整性项
+    if (/报告|完整|分析/.test(lowerName)) {
+      const parts = [content.length > 800, hasTests, hasAnalysis, content.length > 1500].filter(Boolean).length
+      if (parts <= 1) { verdict = 'none'; score = Math.round(r.score * 0.2) }
+      else if (parts <= 3) { verdict = 'partial'; score = Math.round(r.score * 0.7) }
+    }
+
+    return {
+      rubricItemId: r.id,
+      verdict,
+      score,
+      evidence: pickEvidence(content, r.name),
+      reason: buildReason(verdict, score, r.score, r.name, { libHits: libHits.length, codeLen, hasTests, hasAnalysis, hasBoundary }),
+    }
+  })
+
+  const aiTotal = items.reduce((s, it) => s + it.score, 0)
+  const extraChecks: Review['extraChecks'] = [
+    libHits.length > 0
+      ? { type: 'lib', level: 'warn', detail: `检测到第 ${libHits.map((h) => h.lineNo).join('、')} 行直接调用库函数（${libHits[0].lineText.slice(0, 40)}…），疑似绕过自主实现` }
+      : { type: 'lib', level: 'pass', detail: '未检测到调库绕过' },
+  ]
+
+  return {
+    items,
+    aiTotal,
+    comment: {
+      highlights: aiTotal >= 60 ? '报告结构完整，核心内容可读。' : '报告内容已收录，但与实验要求存在差距。',
+      problems: [
+        libHits.length > 0 ? '检测到调库绕过' : null,
+        !hasTests ? '缺少测试用例' : null,
+        !hasAnalysis ? '缺少复杂度/结果分析' : null,
+        !hasBoundary ? '未提及边界处理' : null,
+      ].filter(Boolean).join('；') || '整体完成度尚可，细节有待完善。',
+      suggestions: '建议补充完整测试用例表与复杂度分析；确保核心算法为自主实现（演示模式规则评分，配置 API Key 后可走 AI 逐项核查）。',
+    },
+    extraChecks,
+    finalized: false,
+  }
+}
+
+function extractCodeLen(content: string): number {
+  const lines = content.split('\n')
+  let inCode = false
+  let len = 0
+  for (const l of lines) {
+    if (l.trim().startsWith('```')) { inCode = !inCode; continue }
+    if (inCode) len += l.length
+  }
+  return len
+}
+
+function pickEvidence(content: string, rubricName: string): string {
+  const lines = content.split('\n')
+  // 实现类：找第一个 def 或代码块首行
+  if (/next|主匹配|流程|实现|算法/.test(rubricName)) {
+    const idx = lines.findIndex((l) => /^\s*def\s|```/.test(l))
+    if (idx >= 0) {
+      const buf = lines.slice(idx, idx + 4).join('\n').replace(/```python?\n?/, '')
+      if (buf.trim()) return buf
+    }
+  }
+  if (/边界/.test(rubricName)) {
+    const idx = lines.findIndex((l) => /边界|空串|空模式|if not|len\(/.test(l))
+    if (idx >= 0) return lines.slice(idx, idx + 2).join('\n')
+  }
+  if (/报告|完整|分析/.test(rubricName)) {
+    const idx = lines.findIndex((l) => /测试|用例|T\d|复杂度/.test(l))
+    if (idx >= 0) return lines.slice(idx, idx + 2).join('\n')
+  }
+  // 兜底：报告前几行
+  return lines.slice(0, 2).join('\n').slice(0, 120)
+}
+
+function buildReason(
+  verdict: 'full' | 'partial' | 'none', score: number, full: number, name: string,
+  ctx: { libHits: number; codeLen: number; hasTests: boolean; hasAnalysis: boolean; hasBoundary: boolean },
+): string {
+  if (verdict === 'none') {
+    if (ctx.libHits > 0 && /next|主匹配|流程|实现|算法/.test(name)) return '检测到调库绕过：核心逻辑疑似未自主实现，该项不计分'
+    if (ctx.codeLen < 80) return '报告未见有效代码实现，该项无法核查'
+    return '未找到支撑该评分点的内容'
+  }
+  if (verdict === 'partial') {
+    if (/边界/.test(name) && !ctx.hasBoundary) return '未显式说明边界处理，按部分达成计'
+    if (/规范|注释/.test(name)) return '代码缺少注释或 docstring，规范项部分达成'
+    if (/报告|完整|分析/.test(name)) return ctx.hasTests ? '含测试用例但结果分析不足' : '缺少测试用例，报告完整性部分达成'
+    return '实现基本正确但完成度不足（代码量偏少）'
+  }
+  return `核查通过：${name}，得分 ${score}/${full}`
+}

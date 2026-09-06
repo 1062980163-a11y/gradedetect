@@ -32,6 +32,9 @@ interface Store {
   setSettings: (s: Partial<Settings>) => void
   updateSubmission: (id: string, patch: Partial<Submission>) => void
   updateReview: (id: string, patch: Partial<NonNullable<Submission['review']>>) => void
+  addSubmission: (sub: Omit<Submission, 'id' | 'status' | 'submittedAt'>) => string
+  updateAssignment: (patch: Partial<AppState['assignment']>) => void
+  removeSubmission: (id: string) => void
   resetAll: () => void
 }
 
@@ -58,6 +61,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submissions: prev.submissions.map((sub) =>
         sub.id === id && sub.review ? { ...sub, review: { ...sub.review, ...patch } } : sub,
       ),
+    })),
+    addSubmission: (sub) => {
+      const id = `s${Date.now()}`
+      const now = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const submittedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+      setState((prev) => ({
+        ...prev,
+        submissions: [...prev.submissions, { ...sub, id, status: 'pending', submittedAt }],
+      }))
+      return id
+    },
+    updateAssignment: (patch) => setState((prev) => ({ ...prev, assignment: { ...prev.assignment, ...patch } })),
+    removeSubmission: (id) => setState((prev) => ({
+      ...prev,
+      submissions: prev.submissions.filter((s) => s.id !== id),
     })),
     resetAll: () => {
       localStorage.removeItem(STORAGE_KEY)
